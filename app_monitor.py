@@ -159,6 +159,7 @@ prompt = PromptTemplate.from_template(
     """
 )
 
+
 # Crea el agente ReAct
 agent = create_react_agent(llm=llm, tools=tools, prompt=prompt)
 agent_executor = AgentExecutor(agent=agent, tools=tools, verbose=True, handle_parsing_errors=True)
