@@ -1,18 +1,13 @@
 from dotenv import load_dotenv
 import streamlit as st
-from langchain import hub
-from langchain.agents import AgentExecutor, create_structured_chat_agent
+from langchain.agents import AgentExecutor, create_react_agent
 from langchain_core.messages import AIMessage, HumanMessage
-from langchain_core.tools import Tool
 from langchain_google_genai import ChatGoogleGenerativeAI
 from tools.time import get_current_time
 from tools.wikipedia import search_wikipedia
 from utils.mcp import AzureDevOpsMCPClient, MCP_COMMAND
-from langchain.memory import ConversationSummaryBufferMemory
-from langchain.schema import SystemMessage
-from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder # Import MessagesPlaceholder
-from langchain_core.prompts import PromptTemplate
-from langchain.agents import create_react_agent 
+from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder 
+from langchain.memory import ConversationBufferMemory
 
 # Load environment variables from .env file
 load_dotenv()
@@ -21,63 +16,67 @@ load_dotenv()
 mcp_client = AzureDevOpsMCPClient(command=MCP_COMMAND)
 
 # 2. Define tus herramientas para el agente
-mcp_tools = mcp_client.list_mcp_tools_structuredtool()
+mcp_tools_names, mcp_tools = mcp_client.list_mcp_tools_structuredtool()
 
 home_tools = [ get_current_time,search_wikipedia,]
 home_tools_names = ["get_current_time", "search_wikipedia"]
 
 tools = mcp_tools + home_tools
-tools_names = home_tools_names
+tool_names = mcp_tools_names + home_tools_names
 
 
-prompt = PromptTemplate.from_template("""
-    Eres un asistente de chat amigable y servicial, especializado en ayudar con información sobre Azure DevOps. 
-    Tu principal tarea es responder preguntas sobre el contenido de la **Wiki del proyecto "Prueba-MCP"** de Azure DevOps.
+prompt = ChatPromptTemplate.from_messages([
+    ("system",  """
+    You are a friendly and helpful chat assistant, always responding in **Spanish**, specialized in assisting with information about Azure DevOps. Your primary task is to answer questions about the content of the **Wiki for the "Prueba-MCP" project** in Azure DevOps, although you can chat casually with the user.
 
-    Por favor, responde siempre en **español** y mantén un tono **simpático y conversacional*
-                                      
-    Tienes acceso a las siguientes herramientas:
-    {tools}
-    Aquí tienes una lista de los nombres de las herramientas disponibles para tu referencia: {tool_names}
+    To answer questions, you will use your tools to **search the Azure DevOps Wiki**. It's crucial that you assume all relevant information for user questions is located within the **"Prueba-MCP" project** and can be on **any page within its Wiki**.
 
-                                      
-    Para responder a las preguntas, utilizarás tus herramientas para **buscar en la Wiki de Azure DevOps**. Es fundamental que asumas que toda la información relevante para las preguntas de los usuarios se encuentra dentro del **proyecto "Prueba-MCP"** y puede estar en **cualquier página de su Wiki**.
+    When a user asks you something, your first step should be to search for the answer in the Wiki using any of the information search tools available to you for the Azure DevOps Wiki. If the information is not directly available in the Wiki or if you need more details, you can ask the user for clarification or suggest that the information might not be documented.
 
-    Cuando un usuario te pregunte algo, tu primer paso debe ser buscar la respuesta en la Wiki utilizando alguna de las herramientas de búsqueda de información que tengas disponible para la Wiki de Azure DevOps. Si la información no está directamente disponible en la Wiki o si necesitas más detalles, puedes solicitar aclaraciones al usuario o sugerirle que la información podría no estar documentada.
+    If the user asks you something that is not related to the Azure DevOps Wiki or the tools you have to interact with Azure DevOps, kindly let them know that your primary function is to help them with the Wiki and Azure DevOps.
 
-    Si el usuario te pide algo que no está relacionado con la Wiki de Azure DevOps o las herramientas que tienes para interactuar con Azure DevOps, hazle saber amablemente que tu función principal es ayudarte con la Wiki y Azure DevOps.
+    You have access to the following tools: {tools}
+    Here is a list of the names of the available tools for your reference: {tool_names}
 
-    Pregunta del usuario: {input}
+    User's question: {input}
     {agent_scratchpad}
-    """
-)
 
+    When you have the final answer to the user's question or have completed the task, respond using the following special format:
+    Final Answer: [Your final answer here]
+    """),         
+    MessagesPlaceholder(variable_name="chat_history"),         
+    ("human", "{input}"),         
+    ])
 
 
 # Initialize a model
-llm = ChatGoogleGenerativeAI(model="gemini-2.0-flash")
+llm = ChatGoogleGenerativeAI(model="gemini-1.5-flash")
 
 # Inicializa la memoria de conversación
 if "memory" not in st.session_state:
-    st.session_state.memory = ConversationSummaryBufferMemory(
-        llm=llm,
+    st.session_state.memory = ConversationBufferMemory(
         memory_key="chat_history",
         return_messages=True,
-        max_token_limit=1000
+        input_key="input"  # importante para funcionar con AgentExecutor
     )
     st.session_state.memory.chat_memory.add_ai_message("¡Hola! Soy tu asistente de Azure DevOps. ¿En qué puedo ayudarte hoy?")
 
+# Construct the JSON agent
+agent = create_react_agent(
+    tools=tools,
+    llm=llm,
+    prompt= prompt
+)
 
-
-# Crea el agente y el AgentExecutor 
-agent = create_react_agent(llm=llm, tools=tools, prompt=prompt)
+# Create an agent executor by passing in the agent and tools
 agent_executor = AgentExecutor(
-    agent=agent, 
-    tools=tools, 
-    memory=st.session_state.memory,
-    verbose=True, 
-    handle_parsing_errors=True
-    )
+        agent=agent, 
+        tools=tools, 
+        verbose=True, 
+        memory=st.session_state.memory,
+        handle_parsing_errors=True,
+        return_intermediate_steps=True,
+)
 
 # --- Interfaz de Usuario con Streamlit ---
 st.set_page_config(page_title="ChatBot", layout="wide")
@@ -115,13 +114,10 @@ if user_query: # Este bloque se ejecuta cuando el usuario presiona Enter
     with st.chat_message("assistant"):
         with st.spinner("Pensando..."):
             try:
-                # Crea una instancia del callback handler para la visualización de herramientas
-                #tool_handler = StreamlitToolCallbackHandler(st.empty())
 
                 # Invoca el agente
                 response = agent_executor.invoke(
-                    {"input": user_query}, 
-                    {"agent_scratchpad": ['']}
+                    {"input": user_query}
                 )
 
                 # Muestra la respuesta del agente
@@ -133,7 +129,7 @@ if user_query: # Este bloque se ejecuta cuando el usuario presiona Enter
                 st.error(f"Ocurrió un error al procesar tu consulta: {e}")
                 # Agrega el mensaje de error al historial usando .chat_memory
                 st.session_state.memory.chat_memory.add_ai_message(f"Lo siento, ocurrió un error: {e}")
-                st.info("Asegúrate de que tus preguntas coincidan con los datos y el esquema de la base de datos.")
+                st.info("Problemas.")
 
 st.sidebar.markdown("")
 if st.sidebar.button("🧹 Borrar Historial"):

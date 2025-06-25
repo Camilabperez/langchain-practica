@@ -10,7 +10,7 @@ from typing import Any
 # --- 1. Configuración y Ruta del Servidor MCP ---
 AZURE_DEVOPS_ORG_NAME = "camilabperez" 
 NODE_PATH = "C:/Program Files/nodejs/node.exe"
-MCP_SERVER_INDEX_JS_PATH = "C:/Users/Socius/AppData/Roaming/npm/node_modules/@azure-devops/mcp/dist/index.js" # <-- ¡ESTA ES LA RUTA A VERIFICAR!
+MCP_SERVER_INDEX_JS_PATH = "C:/Users/Socius/AppData/Roaming/npm/node_modules/@azure-devops/mcp/dist/index.js" 
 
 # El comando para iniciar el nuevo servidor MCP globalmente.
 MCP_COMMAND = [NODE_PATH, MCP_SERVER_INDEX_JS_PATH, AZURE_DEVOPS_ORG_NAME]
@@ -190,6 +190,14 @@ class AzureDevOpsMCPClient:
 
         # Retornar como StructuredTool usando el modelo de entrada
         return StructuredTool.from_function(_tool_caller, args_schema=InputModel)
+    
+    def list_mcp_tools_names(self, tool_def: dict) -> list:
+        nombres = []
+        for tool in tool_def:
+            nombre = tool["name"]
+            nombres.append(nombre)
+
+        return nombres
 
     def list_mcp_tools(self) -> list[dict]:
         """
@@ -246,6 +254,7 @@ class AzureDevOpsMCPClient:
 
     def list_mcp_tools_structuredtool(self)-> StructuredTool:
         tools = self.list_mcp_tools()
+        names = self.list_mcp_tools_names(tools)
         structured_tools = [self.convertir_tool_mcp_a_structuredtool(t) for t in tools]
-        return structured_tools
+        return names, structured_tools
     

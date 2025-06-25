@@ -1,2 +1,30 @@
+# Archivos de caché de Python
+utils/__pycache__/
+*.pyc
+*.pyd
+*.pyo
+
+# Entorno virtual
+.venv/
+venv/
+env/
+
+# Archivos de paquetes (distribución)
+dist/
+build/
+*.egg-info/
+
+# Logs y bases de datos locales
+*.log
+*.sqlite3
+*.db
+
+# Archivos de IDEs (ej. VS Code, PyCharm)
+.vscode/
+.idea/
+
+# Archivos de entorno (credenciales sensibles)
 .env
-.venv
+
+
+/viejo
