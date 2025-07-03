@@ -31,7 +31,7 @@ El Agente requiere del MCP Server para comunicarse con Azure DevOps.
 1. Instalar el MCP Server globalmente:
 
 ```bash 
-npm install -g azure-devops-mcp-server
+npm install -g @azure-devops/mcp
 ```
 
 Fuente https://github.com/microsoft/azure-devops-mcp

@@ -18,93 +18,137 @@ mcp_client = AzureDevOpsMCPClient(command=MCP_COMMAND)
 # 2. Define tus herramientas para el agente
 mcp_tools_names, mcp_tools = mcp_client.list_mcp_tools_structuredtool()
 
-home_tools = [ get_current_time,search_wikipedia,]
+home_tools = [get_current_time, search_wikipedia]
 home_tools_names = ["get_current_time", "search_wikipedia"]
 
 tools = mcp_tools + home_tools
 tool_names = mcp_tools_names + home_tools_names
 
-
+# Prompt corregido para ReAct Agent
 prompt = ChatPromptTemplate.from_messages([
-    ("system",  """
-    You are a friendly and helpful chat assistant, always responding in **Spanish**, specialized in assisting with information about Azure DevOps. Your primary task is to answer questions about the content of the **Wiki for the "Prueba-MCP" project** in Azure DevOps, although you can chat casually with the user.
+    ("system", """
+Eres un asistente de chat amable y servicial que responde en **español**. Estás especializado en asistir con información sobre Azure DevOps, específicamente del Wiki del proyecto "Prueba-MCP".
 
-    To answer questions, you will use your tools to **search the Azure DevOps Wiki**. It's crucial that you assume all relevant information for user questions is located within the **"Prueba-MCP" project** and can be on **any page within its Wiki**.
+Tienes acceso a las siguientes herramientas: {tools}
 
-    When a user asks you something, your first step should be to search for the answer in the Wiki using any of the information search tools available to you for the Azure DevOps Wiki. If the information is not directly available in the Wiki or if you need more details, you can ask the user for clarification or suggest that the information might not be documented.
+Para usar una herramienta, sigue EXACTAMENTE este formato:
 
-    If the user asks you something that is not related to the Azure DevOps Wiki or the tools you have to interact with Azure DevOps, kindly let them know that your primary function is to help them with the Wiki and Azure DevOps.
+Thought: Necesito buscar información para responder esta pregunta.
+Action: [nombre_de_la_herramienta]
+Action Input: {{"parametro": "valor"}}
+Observation: [resultado de la herramienta]
 
-    You have access to the following tools: {tools}
-    Here is a list of the names of the available tools for your reference: {tool_names}
+Después de recibir la observación, puedes hacer otro pensamiento y usar otra herramienta, o dar tu respuesta final:
 
-    User's question: {input}
-    {agent_scratchpad}
+Thought: Ahora tengo la información necesaria para responder.
+Final Answer: [tu respuesta en español]
 
-    When you have the final answer to the user's question or have completed the task, respond using the following special format:
-    Final Answer: [Your final answer here]
-    """),         
-    MessagesPlaceholder(variable_name="chat_history"),         
-    ("human", "{input}"),         
-    ])
+IMPORTANTE - FORMATO DE Action Input:
+- SIEMPRE usa JSON válido
+- Para herramientas que requieren solo "query": {{"query": "texto de búsqueda"}}
+- Para herramientas de wiki que solo necesitan project: {{}}  (objeto vacío, se usarán valores por defecto)
+- Para herramientas que necesitan project y path: {{"path": "/ruta/pagina"}}
 
+EJEMPLOS CORRECTOS:
+1. Para listar páginas del wiki:
+   Action: wiki_list_pages
+   Action Input: {{}}
 
-# Initialize a model
-llm = ChatGoogleGenerativeAI(model="gemini-1.5-flash")
+2. Para buscar en el wiki:
+   Action: wiki_search_pages  
+   Action Input: {{"query": "LLM"}}
+
+3. Para obtener contenido de una página:
+   Action: wiki_get_page
+   Action Input: {{"path": "/nombre-de-la-pagina"}}
+
+4. Para buscar en Wikipedia:
+   Action: search_wikipedia
+   Action Input: {{"query": "Azure DevOps"}}
+
+Herramientas disponibles: {tool_names}
+
+Cuando el usuario pregunte sobre contenido del wiki, SIEMPRE empieza listando las páginas disponibles o buscando directamente si tienes términos específicos.
+"""),
+    MessagesPlaceholder(variable_name="chat_history"),
+    ("user", "{input}"),
+    ("assistant", "{agent_scratchpad}")
+])
+
+# Initialize a model with higher temperature for better reasoning
+llm = ChatGoogleGenerativeAI(
+    model="gemini-1.5-flash",
+    temperature=0.1,
+    max_output_tokens=2048
+)
 
 # Inicializa la memoria de conversación
 if "memory" not in st.session_state:
     st.session_state.memory = ConversationBufferMemory(
         memory_key="chat_history",
         return_messages=True,
-        input_key="input"  # importante para funcionar con AgentExecutor
+        input_key="input"
     )
     st.session_state.memory.chat_memory.add_ai_message("¡Hola! Soy tu asistente de Azure DevOps. ¿En qué puedo ayudarte hoy?")
 
-# Construct the JSON agent
+# Construct the ReAct agent
 agent = create_react_agent(
     tools=tools,
     llm=llm,
-    prompt= prompt
+    prompt=prompt
 )
 
-# Create an agent executor by passing in the agent and tools
+# Create an agent executor
 agent_executor = AgentExecutor(
-        agent=agent, 
-        tools=tools, 
-        verbose=True, 
-        memory=st.session_state.memory,
-        handle_parsing_errors=True,
-        return_intermediate_steps=True,
+    agent=agent, 
+    tools=tools, 
+    verbose=True, 
+    memory=st.session_state.memory,
+    handle_parsing_errors=True,
+    max_iterations=10,
+    return_intermediate_steps=True,
+    early_stopping_method="generate"
 )
 
 # --- Interfaz de Usuario con Streamlit ---
-st.set_page_config(page_title="ChatBot", layout="wide")
+st.set_page_config(page_title="ChatBot Azure DevOps", layout="wide")
 st.title("ChatBot Azure DevOps")
 st.markdown("""
-Bienvenido! Este chatbot fue desarrollado para realizar consultas sobre la wiki de AzureDevOps
-            Langchain + MCP + Azure DevOps
+Bienvenido! Este chatbot fue desarrollado para realizar consultas sobre la wiki de Azure DevOps.
+**Tecnologías:** Langchain + MCP + Azure DevOps + Gemini
 """)
 
 placeholder = st.empty()
 
-with placeholder.container():
-    # Muestra el historial de conversación en la interfaz
-    # Aquí debes iterar sobre st.session_state.memory.chat_history (que es una lista de mensajes)
-    for message in st.session_state.memory.chat_memory.messages:
-        if isinstance(message, HumanMessage):
-            with st.chat_message("user"):
-                st.markdown(message.content)
-        elif isinstance(message, AIMessage):
-            with st.chat_message("assistant"):
-                st.markdown(message.content)
-
+# Botón para probar conexión con MCP
+if st.sidebar.button("🔧 Probar Conexión MCP"):
+    try:
+        with st.sidebar:
+            with st.spinner("Probando conexión..."):
+                tools_list = mcp_client.list_mcp_tools()
+                st.success(f"✅ Conexión exitosa! {len(tools_list)} herramientas disponibles")
+                with st.expander("Ver herramientas disponibles"):
+                    for tool in tools_list:
+                        st.write(f"- **{tool['name']}**: {tool.get('description', 'Sin descripción')}")
+    except Exception as e:
+        st.sidebar.error(f"❌ Error de conexión: {e}")
 
 # Usa st.chat_input para la entrada de usuario
 user_query = st.chat_input("¿En qué puedo ayudarte con Azure DevOps?")
 
-if user_query: # Este bloque se ejecuta cuando el usuario presiona Enter
-    # Agrega la pregunta del usuario al historial usando .chat_memory
+# Renderiza el historial solo al inicio
+if user_query is None:
+    with placeholder.container():
+        for message in st.session_state.memory.chat_memory.messages:
+            if isinstance(message, HumanMessage):
+                with st.chat_message("user"):
+                    st.markdown(message.content)
+            elif isinstance(message, AIMessage):
+                with st.chat_message("assistant"):
+                    st.markdown(message.content)
+
+if user_query:
+    # Agrega la pregunta del usuario al historial
     st.session_state.memory.chat_memory.add_user_message(user_query)
 
     # Muestra la pregunta del usuario inmediatamente
@@ -112,26 +156,53 @@ if user_query: # Este bloque se ejecuta cuando el usuario presiona Enter
         st.markdown(user_query)
 
     with st.chat_message("assistant"):
-        with st.spinner("Pensando..."):
+        with st.spinner("Buscando en Azure DevOps..."):
             try:
-
                 # Invoca el agente
                 response = agent_executor.invoke(
-                    {"input": user_query}
+                    {"input": user_query},
+                    config={"verbose": True}
                 )
 
                 # Muestra la respuesta del agente
-                st.markdown(response["output"])
-                # Agrega la respuesta del agente al historial usando .chat_memory
-                st.session_state.memory.chat_memory.add_ai_message(response["output"])
+                if "output" in response:
+                    st.markdown(response["output"])
+                    st.session_state.memory.chat_memory.add_ai_message(response["output"])
+                else:
+                    error_msg = "No se pudo obtener una respuesta válida del agente."
+                    st.error(error_msg)
+                    st.session_state.memory.chat_memory.add_ai_message(error_msg)
+
+                # Mostrar pasos intermedios en modo debug
+                if st.sidebar.checkbox("🐛 Modo Debug"):
+                    if "intermediate_steps" in response:
+                        with st.expander("Ver pasos de ejecución"):
+                            for i, (action, observation) in enumerate(response["intermediate_steps"]):
+                                st.write(f"**Paso {i+1}:**")
+                                st.write(f"- Acción: {action.tool}")
+                                st.write(f"- Entrada: {action.tool_input}")
+                                st.write(f"- Resultado: {observation}")
+                                st.divider()
 
             except Exception as e:
-                st.error(f"Ocurrió un error al procesar tu consulta: {e}")
-                # Agrega el mensaje de error al historial usando .chat_memory
-                st.session_state.memory.chat_memory.add_ai_message(f"Lo siento, ocurrió un error: {e}")
-                st.info("Problemas.")
+                error_msg = f"Ocurrió un error al procesar tu consulta: {str(e)}"
+                st.error(error_msg)
+                st.session_state.memory.chat_memory.add_ai_message(f"Lo siento, {error_msg}")
+                
+                # Mostrar stack trace en modo debug
+                if st.sidebar.checkbox("🐛 Modo Debug", key="debug_error"):
+                    st.exception(e)
 
-st.sidebar.markdown("")
+# Sidebar con controles
+st.sidebar.markdown("### Controles")
 if st.sidebar.button("🧹 Borrar Historial"):
     st.session_state.memory.chat_memory.clear()
+    st.session_state.memory.chat_memory.add_ai_message("¡Hola! Soy tu asistente de Azure DevOps. ¿En qué puedo ayudarte hoy?")
     placeholder.empty()
+    st.rerun()
+
+# Mostrar información del sistema
+with st.sidebar.expander("ℹ️ Información del Sistema"):
+    st.write(f"**Herramientas MCP:** {len(mcp_tools)}")
+    st.write(f"**Herramientas locales:** {len(home_tools)}")
+    st.write(f"**Total herramientas:** {len(tools)}")
