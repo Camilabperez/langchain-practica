@@ -18,7 +18,7 @@ def setup_environment():
     required_vars = {
         'AZDO_ORG_URL': f'https://dev.azure.com/{AZURE_DEVOPS_ORG_NAME}',
         'AZDO_DEFAULT_PROJECT': 'Prueba-MCP',
-        'AZDO_PAT': "4gX9c2VraDHmMA3KT9XbWJnuJYZxgHdrZ0Od0wbhzNBq7YOgRfhoJQQJ99BGACAAAAArAfM8AAAGAZDO2Yw6"  # Debe ser configurado por el usuario
+        'AZDO_PAT': os.environ.copy().get('AZDO_PAT')  # Debe ser configurado por el usuario
     }
     
     # Verificar si las variables están configuradas
