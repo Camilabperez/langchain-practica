@@ -18,7 +18,7 @@ def setup_environment():
     required_vars = {
         'AZDO_ORG_URL': f'https://dev.azure.com/{AZURE_DEVOPS_ORG_NAME}',
         'AZDO_DEFAULT_PROJECT': 'Prueba-MCP',
-        'AZDO_PAT': os.environ.copy().get('AZDO_PAT')  # Debe ser configurado por el usuario
+        'AZDO_PAT': os.getenv("AZDO_PAT", "")  # Debe ser configurado por el usuario
     }
     
     # Verificar si las variables están configuradas
@@ -486,5 +486,51 @@ def diagnosticar_configuracion():
     print(f"   Linux/Mac: export AZDO_PAT=tu_token_aqui")
     print(f"   O crear archivo .env con las variables necesarias")
 
-if __name__ == "__main__":
-    diagnosticar_configuracion()
+MCP_PROVIDERS = {
+    "azure": {
+        "command": [
+            "C:/Program Files/nodejs/node.exe",
+            "C:/Users/gasto/AppData/Roaming/npm/node_modules/@azure-devops/mcp/dist/index.js",
+            "camilabperez"
+        ],
+        "env": {
+            "AZDO_ORG_URL": "https://dev.azure.com/camilabperez",
+            "AZDO_DEFAULT_PROJECT": "Prueba-MCP",
+            # El PAT debe venir de tu .env o variable de entorno
+            "AZDO_PAT": os.getenv("AZDO_PAT", ""),
+        }
+    },
+    "ibm": {
+        "command": [
+            "ruta/al/ibm_mcp",  # Cambia esto por el ejecutable real de IBM MCP
+            "--org", "tu_organizacion_ibm",
+            "--project", "tu_proyecto_ibm"
+        ],
+        "env": {
+            "IBM_API_KEY": os.getenv("IBM_API_KEY", ""),
+            # Agrega aquí otras variables necesarias para IBM
+        }
+    }
+    # Puedes agregar más proveedores aquí
+}
+
+class MCPClient:
+    def __init__(self, provider: str):
+        if provider not in MCP_PROVIDERS:
+            raise ValueError(f"Proveedor MCP '{provider}' no soportado.")
+        self.provider = provider
+        self.command = MCP_PROVIDERS[provider]["command"]
+        # Mezcla las variables de entorno del sistema con las del proveedor
+        self.env_vars = {**os.environ, **MCP_PROVIDERS[provider]["env"]}
+        self.process = None
+
+    def start_server(self):
+        import platform
+        use_shell = platform.system() == "Windows"
+        print(f"Iniciando MCP Server para {self.provider} con comando: {' '.join(self.command)}")
+        self.process = subprocess.Popen(
+            self.command,
+            env=self.env_vars,
+            shell=use_shell
+        )
+        print("✅ Proceso MCP Server iniciado.")
