@@ -3,15 +3,13 @@ import streamlit as st
 from langchain.agents import AgentExecutor, create_react_agent
 from langchain_core.messages import AIMessage, HumanMessage
 from langchain_google_genai import ChatGoogleGenerativeAI
-from langchain_together import ChatTogether
 from tools.time import get_current_time
-from tools.wikipedia import search_wikipedia
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder 
 from langchain.memory import ConversationBufferMemory
 from langchain_anthropic import ChatAnthropic
 
 # Importar la nueva integración de Edge Wiki
-from edge_wiki_integration import create_edge_wiki_tools, test_edge_wiki_connection, add_edge_wiki_to_sidebar
+from utils.edge_wiki_integration import create_edge_wiki_tools, test_edge_wiki_connection, add_edge_wiki_to_sidebar
 
 import os
 

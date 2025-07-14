@@ -44,7 +44,7 @@ class EdgeWikiClient:
                 request=search_request, 
                 project=self.project
             )
-            
+        
             return [{
                 'file_name': wiki.file_name,
                 'path': wiki.path,
@@ -77,7 +77,7 @@ class EdgeWikiClient:
             return {
                 'path': result.page.path,
                 'content': result.page.content,
-                'url': self._get_wiki_url(result.project.id, wiki_id, path)
+                'url': self._get_wiki_url(self.project, wiki_id, path)
             }
             
         except Exception as e:
@@ -106,7 +106,7 @@ class WikiSearchInput(BaseModel):
 
 class WikiPageInput(BaseModel):
     path: str = Field(description="Path de la página del wiki")
-    wiki_id: str = Field(description="ID del wiki")
+    wiki_id: str = Field(description="ID del wiki", default=None)
 
 class EmptyInput(BaseModel):
     pass
@@ -123,23 +123,33 @@ def create_edge_wiki_tools(org: str = None, project: str = None, pat: str = None
     
     def search_wiki_tool(query: str, wiki_id: str = None) -> str:
         """Busca contenido en el wiki, opcionalmente filtrando por wiki_id"""
+        actual_query_text = query 
+        actual_wiki_id = wiki_id 
+
+        # Lógica para intentar parsear el input si viene como un JSON string
+        if isinstance(query, str) and query.strip().startswith('{') and query.strip().endswith('}'):
+            try:
+                parsed_input = json.loads(query)
+                if 'query' in parsed_input:
+                    actual_query_text = parsed_input['query']
+                if 'wiki_id' in parsed_input:
+                    actual_wiki_id = parsed_input['wiki_id']
+                print(f"DEBUG: Input parseado: query='{actual_query_text}', wiki_id='{actual_wiki_id}'") # Nuevo print para depurar
+            except json.JSONDecodeError:
+                pass 
+
         try:
-            results = client.search_wiki(query)
-            if wiki_id:
-                results = [r for r in results if r['wiki_id'] == wiki_id]
+            results = client.search_wiki(actual_query_text)
+            
+            if actual_wiki_id: 
+                results = [r for r in results if r['wiki_id'] == actual_wiki_id]
+            
             if not results:
-                # Si wiki_id es None, intenta extraerlo de query si es un JSON
-                extracted_wiki_id = wiki_id
-                if wiki_id is None and isinstance(query, str) and query.startswith("{"):
-                    try:
-                        data = json.loads(query)
-                        extracted_wiki_id = data.get("wiki_id", None)
-                    except Exception:
-                        pass
                 return json.dumps({
                     "results": [],
-                    "message": f"No se encontraron resultados para el término '{query}' en el wiki '{extracted_wiki_id or 'Sin especificar'}'."
+                    "message": f"No se encontraron resultados para el término '{actual_query_text}' en el wiki '{actual_wiki_id or 'Sin especificar'}'."
                 }, ensure_ascii=False)
+            
             formatted_results = []
             for result in results[:10]:
                 formatted_results.append({
@@ -152,10 +162,34 @@ def create_edge_wiki_tools(org: str = None, project: str = None, pat: str = None
         except Exception as e:
             return f"Error buscando en wiki: {str(e)}"
     
-    def get_wiki_page_tool(path: str, wiki_id: str) -> str:
+    def get_wiki_page_tool(path: str, wiki_id: str = None) -> str:
         """Obtiene el contenido completo de una página del wiki"""
+        actual_path = path
+        actual_wiki_id = wiki_id
+
+        # Lógica para intentar parsear el input si viene como un JSON string
+        if isinstance(path, str) and path.strip().startswith('{') and path.strip().endswith('}'):
+            try:
+                parsed_input = json.loads(path)
+                if 'path' in parsed_input:
+                    actual_path = parsed_input['path']
+                if 'wiki_id' in parsed_input:
+                    actual_wiki_id = parsed_input['wiki_id']
+            except json.JSONDecodeError:
+                pass
+
+        # Asegúrate de que actual_wiki_id no sea None en este punto, ya que es requerido
+        if actual_path is None or actual_wiki_id is None:
+            return json.dumps({
+                "error": "path and wiki_id are required for edge_wiki_get_page",
+                "received_path_arg": path, # Usamos los argumentos originales para depurar
+                "received_wiki_id_arg": wiki_id,
+                "processed_path": actual_path, # Y los procesados
+                "processed_wiki_id": actual_wiki_id
+            }, ensure_ascii=False)
+
         try:
-            result = client.get_wiki_by_path(path, wiki_id)
+            result = client.get_wiki_by_path(actual_path, actual_wiki_id)
             return json.dumps(result, indent=2, ensure_ascii=False)
         except Exception as e:
             return f"Error obteniendo página del wiki: {str(e)}"
