@@ -92,5 +92,14 @@ Una breve descripción de la estructura principal de tu proyecto puede ser muy �
 - main-app.py: aplicacion principal, en la que se esta desarrollando el chatbot
 
 
+## LLM Local
+Se ejecuta un LLM Granite en una maquina virtual Ubuntu. 
+Dentro de la familia de modelos Granite de IBM, se eligió ibm-granite/granite-3.3-2b-instruct-GGUF:
+- instruct: interacción conversacional y el seguimiento de instrucciones
+- formato GGUF: eficiencia en CPU con Ollama. 
+- tamaño 2B (2 billones de parámetros): Para una VM con 2 vCPUs y 10GB de RAM, un modelo de 2B cuantizado ofrece el mejor equilibrio entre rendimiento (velocidad de inferencia) y calidad. Modelos más grandes (7B/8B) serían significativamente más lentos y consumirían más recursos, mientras que modelos más pequeños (menos de 2B) podrían comprometer demasiado la calidad de las respuestas.
+
+Se utiliza la plataforma Ollama para ejecutar, servir y gestionar el LLM. Este se encuentra construido sobre llama.cpp, un motor de inferencia altamente optimizado para arquitecturas de CPU (y GPUs, si están presentes).
+
 
 
