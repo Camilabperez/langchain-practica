@@ -7,8 +7,10 @@ from tools.time import get_current_time
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder 
 from langchain.memory import ConversationBufferMemory
 from langchain_anthropic import ChatAnthropic
+from langchain_openai import ChatOpenAI
+from langchain_together import ChatTogether
 
-# Importar la nueva integración de Edge Wiki
+# Importar la integración de Edge Wiki
 from utils.edge_wiki_integration import create_edge_wiki_tools, test_edge_wiki_connection, add_edge_wiki_to_sidebar
 
 import os
@@ -117,8 +119,20 @@ Cuando encuentres información en el wiki, incluye siempre el enlace a la págin
 ])
 
 # Inicializar el modelo LLM
+BASE_URL = "http://20.57.48.191:8084/v1"
+MODEL_NAME = "granite-2b-custom-2cpu:latest"
 @st.cache_resource
-def initialize_llm():
+def initialize_llm_local():
+    """Inicializa el modelo de lenguaje"""
+    return ChatOpenAI(
+        openai_api_base=BASE_URL,
+        model_name=MODEL_NAME,
+        openai_api_key="sk-not-required"
+    )
+
+
+@st.cache_resource
+def initialize_llm_gemini():
     """Inicializa el modelo de lenguaje"""
     return ChatGoogleGenerativeAI(
         model="gemini-2.5-flash",
@@ -129,25 +143,24 @@ def initialize_llm():
 @st.cache_resource
 def initialize_llm2():
     return ChatAnthropic(
-    model="claude-3-5-sonnet-20240620", # Modelo popular y balanceado
-    temperature=0.1,
-    max_tokens=2048, # Nota: el parámetro se llama `max_tokens`
-    #anthropic_api_key=""
-)
+        model="claude-3-5-sonnet-20240620", 
+        temperature=0.1,
+        max_tokens=2048, 
+        anthropic_api_key=""
+    )
 
-# Inicializar el modelo LLM con Together AI
-#@st.cache_resource
-#def initialize_llm():
-#    """Inicializa el modelo de lenguaje"""
-#   return ChatTogether(
-#        together_api_key=os.getenv("TOGETHER_API_KEY"),
-#       model="meta-llama/Meta-Llama-3.1-8B-Instruct-Turbo",  # Modelo recomendado
-#       temperature=0.1,
-#       max_tokens=2048
-#    )
+@st.cache_resource
+def initialize_llm_TogetherAI():
+    """Inicializa el modelo de lenguaje"""
+    return ChatTogether(
+        together_api_key=os.getenv("TOGETHER_API_KEY"),
+       model="meta-llama/Meta-Llama-3.1-8B-Instruct-Turbo", 
+       temperature=0.1,
+       max_tokens=2048
+    )
 
 
-llm = initialize_llm()
+llm = initialize_llm_local()
 
 # Inicializar la memoria de conversación
 if "memory" not in st.session_state:
